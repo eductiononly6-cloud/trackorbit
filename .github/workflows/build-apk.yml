@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build:
-    name: Build Android APK
+    name: Build Standalone Offline Android APK
     runs-on: ubuntu-latest
     env:
       ANDROID_HOME: /usr/local/lib/android/sdk
@@ -45,61 +45,79 @@ jobs:
 
       - name: 🧩 Integrate Native Widget Files & Manifest
         run: |
-          # Ensure destination directories exist
           mkdir -p mobile/android/app/src/main/java/com/tracker/widget
           mkdir -p mobile/android/app/src/main/res/layout
           mkdir -p mobile/android/app/src/main/res/xml
 
-          # Copy from persistent template directory
           cp -f mobile/widget_src/java/com/tracker/widget/GoalsWidgetProvider.kt mobile/android/app/src/main/java/com/tracker/widget/GoalsWidgetProvider.kt
           cp -f mobile/widget_src/res/layout/widget_goals_medium.xml mobile/android/app/src/main/res/layout/widget_goals_medium.xml
           cp -f mobile/widget_src/res/layout/widget_goals_small.xml mobile/android/app/src/main/res/layout/widget_goals_small.xml
           cp -f mobile/widget_src/res/xml/goals_widget_info.xml mobile/android/app/src/main/res/xml/goals_widget_info.xml
 
-          # Verify files exist before compiling
-          ls -la mobile/android/app/src/main/res/xml/
-          ls -la mobile/android/app/src/main/res/layout/
-
-          # Inject widget receiver into AndroidManifest.xml before </application> if not already present
           MANIFEST="mobile/android/app/src/main/AndroidManifest.xml"
           if [ -f "$MANIFEST" ] && ! grep -q "GoalsWidgetProvider" "$MANIFEST"; then
             WIDGET_CONFIG='    <receiver android:name="com.tracker.widget.GoalsWidgetProvider" android:exported="true">\n      <intent-filter>\n        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />\n      </intent-filter>\n      <meta-data android:name="android.appwidget.provider" android:resource="@xml/goals_widget_info" />\n    </receiver>\n  </application>'
             sed -i "s|  </application>|$WIDGET_CONFIG|" "$MANIFEST"
           fi
 
-      - name: 🔨 Compile Android Debug APK with Gradle
+      - name: ⚡ Configure 100% Offline Standalone Bundling & Debug Signing
+        run: |
+          BUILD_GRADLE="mobile/android/app/build.gradle"
+
+          # 1. Force bundleInDebug = true inside react { ... } block
+          sed -i '/react {/a \    bundleInDebug = true' "$BUILD_GRADLE"
+
+          # 2. Configure release buildType to sign with debug keystore and disable ProGuard minification issues
+          sed -i 's/signingConfig signingConfigs.release/signingConfig signingConfigs.debug/g' "$BUILD_GRADLE"
+          sed -i 's/minifyEnabled enableProguardInReleaseBuilds/minifyEnabled false/g' "$BUILD_GRADLE"
+
+          # Fallback: if release signingConfig was not set, add it
+          if ! grep -q "signingConfig signingConfigs.debug" "$BUILD_GRADLE"; then
+            sed -i '/release {/a \            signingConfig signingConfigs.debug' "$BUILD_GRADLE"
+          fi
+
+      - name: 🔨 Compile 100% Offline Standalone Android APK with Gradle
         run: |
           cd mobile/android
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          # Compile Release APK (embeds complete JS bundle + Hermes bytecode into APK)
+          ./gradlew assembleRelease --no-daemon
 
-      - name: 🔍 Locate Generated APK
+      - name: 🔍 Locate Generated Standalone APK
         id: locate_apk
         run: |
-          APK_PATH=$(find mobile/android/app/build/outputs/apk/debug -name "*.apk" | head -n 1)
-          echo "Found APK at: $APK_PATH"
+          APK_PATH=$(find mobile/android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            APK_PATH=$(find mobile/android/app/build/outputs/apk -name "*.apk" | head -n 1)
+          fi
+          echo "Found Standalone APK at: $APK_PATH"
           echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
 
-      - name: 📤 Upload APK Artifact to GitHub Actions
+      - name: 📤 Upload Standalone APK Artifact to GitHub Actions
         uses: actions/upload-artifact@v4
         with:
-          name: TrackOrbit-Debug-App
+          name: TrackOrbit-Offline-APK
           path: ${{ steps.locate_apk.outputs.apk_path }}
           retention-days: 30
 
-      - name: 🚀 Publish Direct APK to GitHub Release
+      - name: 🚀 Publish Direct Standalone APK to GitHub Release
         uses: softprops/action-gh-release@v2
         if: success()
         with:
           files: ${{ steps.locate_apk.outputs.apk_path }}
-          tag_name: v1.0.${{ github.run_number }}
-          name: TrackOrbit v1.0.${{ github.run_number }} (Direct APK)
+          tag_name: v1.0.${{ github.run_number }}-offline
+          name: TrackOrbit v1.0.${{ github.run_number }} (100% Offline Standalone APK)
           body: |
-            ### 📱 TrackOrbit Android APK
-            Install directly on your phone:
-            1. Download the `.apk` file below directly on your Android phone.
+            ### 📱 TrackOrbit 100% Offline Standalone Android APK
+            This APK packages the entire JavaScript bundle and Hermes runtime directly inside the file:
+            - **100% Offline:** Runs completely standalone without any Metro server or computer connection.
+            - **Offline Local SQLite Storage:** Automatically persists all weekly goals and daily progress locally on device.
+            - **Native Widgets:** Includes the Android Home Screen Widget.
+            
+            #### Instructions:
+            1. Download `app-release.apk` directly on your Android phone.
             2. Tap to install (enable "Install from unknown sources" if prompted).
-            3. Enjoy full offline goal tracking with live calendar splitting!
+            3. Open and track your goals anytime, anywhere, with zero internet needed!
           draft: false
           prerelease: false
         env:
