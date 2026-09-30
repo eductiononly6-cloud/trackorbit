@@ -8,7 +8,8 @@ import {
   SafeAreaView,
   StatusBar,
   Modal,
-  TextInput
+  TextInput,
+  Platform
 } from 'react-native';
 import { GoalItem, MonthModel, WeekModel } from './src/types/tracker';
 import { getLiveMonthModel, toDateString, formatWeekRange } from './src/utils/calendarEngine';
@@ -110,7 +111,7 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#020617" />
+      <StatusBar barStyle="light-content" backgroundColor="#020617" translucent={true} />
       
       {/* Header */}
       <View style={styles.header}>
@@ -460,14 +461,16 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#020617'
+    backgroundColor: '#020617',
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 28) + 8 : 0
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 8,
+    paddingBottom: 14,
     borderBottomWidth: 1,
     borderColor: '#1e293b',
     backgroundColor: '#0b0f19'
@@ -880,7 +883,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.85)',
     justifyContent: 'center',
-    padding: 20
+    padding: 20,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 28) + 16 : 20
   },
   modalContent: {
     backgroundColor: '#0f172a',
