@@ -1,0 +1,32 @@
+# Node modules
+node_modules/
+mobile/node_modules/
+
+# Build artifacts
+dist/
+build/
+.expo/
+mobile/.expo/
+mobile/dist/
+
+# Android build outputs
+mobile/android/.gradle/
+mobile/android/app/build/
+*.apk
+*.aab
+
+# iOS
+mobile/ios/Pods/
+mobile/ios/build/
+
+# Logs & temp
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment
+.env
+.env.local
+.DS_Store
+Thumbs.db
