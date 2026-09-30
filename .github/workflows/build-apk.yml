@@ -45,14 +45,20 @@ jobs:
 
       - name: 🧩 Integrate Native Widget Files & Manifest
         run: |
-          # Copy Kotlin Provider & XML Layouts
+          # Ensure destination directories exist
           mkdir -p mobile/android/app/src/main/java/com/tracker/widget
           mkdir -p mobile/android/app/src/main/res/layout
           mkdir -p mobile/android/app/src/main/res/xml
 
-          cp -f mobile/android/app/src/main/java/com/tracker/widget/GoalsWidgetProvider.kt mobile/android/app/src/main/java/com/tracker/widget/GoalsWidgetProvider.kt || true
-          cp -f mobile/android/app/src/main/res/layout/widget_goals_*.xml mobile/android/app/src/main/res/layout/ || true
-          cp -f mobile/android/app/src/main/res/xml/goals_widget_info.xml mobile/android/app/src/main/res/xml/ || true
+          # Copy from persistent template directory
+          cp -f mobile/widget_src/java/com/tracker/widget/GoalsWidgetProvider.kt mobile/android/app/src/main/java/com/tracker/widget/GoalsWidgetProvider.kt
+          cp -f mobile/widget_src/res/layout/widget_goals_medium.xml mobile/android/app/src/main/res/layout/widget_goals_medium.xml
+          cp -f mobile/widget_src/res/layout/widget_goals_small.xml mobile/android/app/src/main/res/layout/widget_goals_small.xml
+          cp -f mobile/widget_src/res/xml/goals_widget_info.xml mobile/android/app/src/main/res/xml/goals_widget_info.xml
+
+          # Verify files exist before compiling
+          ls -la mobile/android/app/src/main/res/xml/
+          ls -la mobile/android/app/src/main/res/layout/
 
           # Inject widget receiver into AndroidManifest.xml before </application> if not already present
           MANIFEST="mobile/android/app/src/main/AndroidManifest.xml"
