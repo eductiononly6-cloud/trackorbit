@@ -3,12 +3,18 @@ name: Build Android APK
 on:
   push:
     branches: [ main, master ]
-  workflow_dispatch: # Allows manual trigger from GitHub Actions tab
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
     name: Build Android APK
     runs-on: ubuntu-latest
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
 
     steps:
       - name: ⬇️ Checkout Repository
@@ -27,9 +33,6 @@ jobs:
           cache: 'npm'
           cache-dependency-path: mobile/package-lock.json
 
-      - name: 📱 Setup Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: 📦 Install Mobile Dependencies
         run: |
           cd mobile
@@ -40,14 +43,23 @@ jobs:
           cd mobile
           npx expo prebuild --platform android --clean
 
-      - name: 🧩 Link Native Widget Files to Android Project
+      - name: 🧩 Integrate Native Widget Files & Manifest
         run: |
+          # Copy Kotlin Provider & XML Layouts
           mkdir -p mobile/android/app/src/main/java/com/tracker/widget
           mkdir -p mobile/android/app/src/main/res/layout
           mkdir -p mobile/android/app/src/main/res/xml
-          cp -f mobile/android/app/src/main/java/com/tracker/widget/GoalsWidgetProvider.kt mobile/android/app/src/main/java/com/tracker/widget/ || true
+
+          cp -f mobile/android/app/src/main/java/com/tracker/widget/GoalsWidgetProvider.kt mobile/android/app/src/main/java/com/tracker/widget/GoalsWidgetProvider.kt || true
           cp -f mobile/android/app/src/main/res/layout/widget_goals_*.xml mobile/android/app/src/main/res/layout/ || true
           cp -f mobile/android/app/src/main/res/xml/goals_widget_info.xml mobile/android/app/src/main/res/xml/ || true
+
+          # Inject widget receiver into AndroidManifest.xml before </application> if not already present
+          MANIFEST="mobile/android/app/src/main/AndroidManifest.xml"
+          if [ -f "$MANIFEST" ] && ! grep -q "GoalsWidgetProvider" "$MANIFEST"; then
+            WIDGET_CONFIG='    <receiver android:name="com.tracker.widget.GoalsWidgetProvider" android:exported="true">\n      <intent-filter>\n        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />\n      </intent-filter>\n      <meta-data android:name="android.appwidget.provider" android:resource="@xml/goals_widget_info" />\n    </receiver>\n  </application>'
+            sed -i "s|  </application>|$WIDGET_CONFIG|" "$MANIFEST"
+          fi
 
       - name: 🔨 Compile Android Debug APK with Gradle
         run: |
@@ -69,9 +81,9 @@ jobs:
           path: ${{ steps.locate_apk.outputs.apk_path }}
           retention-days: 30
 
-      - name: 🚀 Create GitHub Release with APK
-        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+      - name: 🚀 Publish Direct APK to GitHub Release
         uses: softprops/action-gh-release@v2
+        if: success()
         with:
           files: ${{ steps.locate_apk.outputs.apk_path }}
           tag_name: v1.0.${{ github.run_number }}
