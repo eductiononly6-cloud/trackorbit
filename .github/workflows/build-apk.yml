@@ -60,36 +60,38 @@ jobs:
             sed -i "s|  </application>|$WIDGET_CONFIG|" "$MANIFEST"
           fi
 
-      - name: ⚡ Configure 100% Offline Standalone Bundling & Debug Signing
+      - name: ⚡ Configure Standalone Offline Signing
         run: |
           BUILD_GRADLE="mobile/android/app/build.gradle"
+          # Configure release buildType to sign with debug keystore so it installs immediately on any phone
+          python3 -c "
+          with open('$BUILD_GRADLE', 'r') as f:
+              content = f.read()
 
-          # 1. Force bundleInDebug = true inside react { ... } block
-          sed -i '/react {/a \    bundleInDebug = true' "$BUILD_GRADLE"
+          # Replace signingConfig signingConfigs.release or add signingConfig signingConfigs.debug to release
+          if 'signingConfigs.debug' in content and 'signingConfig signingConfigs.debug' not in content:
+              content = content.replace('signingConfig signingConfigs.release', 'signingConfig signingConfigs.debug')
+          
+          # In Expo / React Native, ensure release block has signingConfig signingConfigs.debug
+          if 'release {' in content and 'signingConfig signingConfigs.debug' not in content:
+              content = content.replace('release {', 'release {\n            signingConfig signingConfigs.debug')
 
-          # 2. Configure release buildType to sign with debug keystore and disable ProGuard minification issues
-          sed -i 's/signingConfig signingConfigs.release/signingConfig signingConfigs.debug/g' "$BUILD_GRADLE"
-          sed -i 's/minifyEnabled enableProguardInReleaseBuilds/minifyEnabled false/g' "$BUILD_GRADLE"
-
-          # Fallback: if release signingConfig was not set, add it
-          if ! grep -q "signingConfig signingConfigs.debug" "$BUILD_GRADLE"; then
-            sed -i '/release {/a \            signingConfig signingConfigs.debug' "$BUILD_GRADLE"
-          fi
+          with open('$BUILD_GRADLE', 'w') as f:
+              f.write(content)
+          "
+          grep -A 10 "buildTypes" "$BUILD_GRADLE" || true
 
       - name: 🔨 Compile 100% Offline Standalone Android APK with Gradle
         run: |
           cd mobile/android
           chmod +x gradlew
-          # Compile Release APK (embeds complete JS bundle + Hermes bytecode into APK)
+          # assembleRelease packages the full offline JS bundle + Hermes bytecode into the APK
           ./gradlew assembleRelease --no-daemon
 
       - name: 🔍 Locate Generated Standalone APK
         id: locate_apk
         run: |
-          APK_PATH=$(find mobile/android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
-          if [ -z "$APK_PATH" ]; then
-            APK_PATH=$(find mobile/android/app/build/outputs/apk -name "*.apk" | head -n 1)
-          fi
+          APK_PATH=$(find mobile/android/app/build/outputs/apk -name "*.apk" | head -n 1)
           echo "Found Standalone APK at: $APK_PATH"
           echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
 
@@ -110,7 +112,7 @@ jobs:
           body: |
             ### 📱 TrackOrbit 100% Offline Standalone Android APK
             This APK packages the entire JavaScript bundle and Hermes runtime directly inside the file:
-            - **100% Offline:** Runs completely standalone without any Metro server or computer connection.
+            - **100% Offline:** Runs completely standalone without any Metro server, computer, or Wi-Fi.
             - **Offline Local SQLite Storage:** Automatically persists all weekly goals and daily progress locally on device.
             - **Native Widgets:** Includes the Android Home Screen Widget.
             
